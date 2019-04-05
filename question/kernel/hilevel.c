@@ -1,18 +1,18 @@
 /* Copyright (C) 2017 Daniel Page <csdsp@bristol.ac.uk>
  *
- * Use of this source code is restricted per the CC BY-NC-ND license, a copy of 
- * which can be found via http://creativecommons.org (and should be included as 
+ * Use of this source code is restricted per the CC BY-NC-ND license, a copy of
+ * which can be found via http://creativecommons.org (and should be included as
  * LICENSE.txt within the associated archive or repository).
  */
 
 #include "hilevel.h"
 
-/* We assume there will be 2 user processes, stemming from the 2 user programs, 
- * and so can 
- * 
- * - allocate a fixed-size process table (of PCBs), and then maintain an index 
+/* We assume there will be 2 user processes, stemming from the 2 user programs,
+ * and so can
+ *
+ * - allocate a fixed-size process table (of PCBs), and then maintain an index
  *   into it to keep track of the currently executing process, and
- * - employ a fixed-case of round-robin scheduling: no more processes can be 
+ * - employ a fixed-case of round-robin scheduling: no more processes can be
  *   created, and neither can be terminated, so assume both are always ready
  *   to execute.
  */
@@ -36,7 +36,7 @@ int priorities[] = {5, 3, 1};
 void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
   char prev_pid = '?', next_pid = '?';
 
-  prev->status = STATUS_READY;             // update   execution status  of previous P_ 
+  prev->status = STATUS_READY;             // update   execution status  of previous P_
   next->status = STATUS_EXECUTING;         // update   execution status  of next     P_
 
   if( NULL != prev ) {
@@ -98,7 +98,7 @@ int getPriority(int index) {
 
 int getNextProcessPriority(){
   int highest_prty_index = 0;
-  for (int i = 0; i < currentNumProcesses; i++){
+  for (int i = 0; i < numProcesses; i++){
     if (pcb[i].alive){
       if(getPriority(i)> getPriority(highest_prty_index)){
         highest_prty_index = i;
@@ -109,8 +109,8 @@ int getNextProcessPriority(){
 }
 
 void increasePrioritiesExceptAt(int index) {
-  for(int i = 0; i < currentNumProcesses; i++){
-    if(i!=index){
+  for(int i = 0; i < numProcesses; i++){
+    if(i!=index && pcb[i].alive){
       pcb[i].curr_prty++;
     }
   }
@@ -120,8 +120,8 @@ void schedule_priority( ctx_t* ctx ) {
   int next_process_index = getNextProcessPriority();
   if    (current_index != next_process_index) {
     dispatch(ctx, &pcb[current_index], &pcb[next_process_index]);
-    
-    
+
+
     pcb[ next_process_index ].curr_prty  = 0;   // update   priority  value   of P_next to initial priority value
 
     pcb[ current_index].status = STATUS_READY;
@@ -136,15 +136,15 @@ void schedule( ctx_t* ctx) {
   schedule_priority(ctx);
 }
 
-void hilevel_handler_rst( ctx_t* ctx              ) { 
-  /* Initialise two PCBs, representing user processes stemming from execution 
+void hilevel_handler_rst( ctx_t* ctx              ) {
+  /* Initialise two PCBs, representing user processes stemming from execution
    * of two user programs.  Note in each case that
-   *    
-   * - the CPSR value of 0x50 means the processor is switched into USR mode, 
+   *
+   * - the CPSR value of 0x50 means the processor is switched into USR mode,
    *   with IRQ interrupts enabled, and
-   * - the PC and SP values matche the entry point and top of stack. 
+   * - the PC and SP values matche the entry point and top of stack.
    */
-  
+
   TIMER0->Timer1Load  = 0x00100000; // select period = 2^20 ticks ~= 1 sec
   TIMER0->Timer1Ctrl  = 0x00000002; // select 32-bit   timer
   TIMER0->Timer1Ctrl |= 0x00000040; // select periodic timer
@@ -182,8 +182,8 @@ void hilevel_handler_rst( ctx_t* ctx              ) {
   pcb[ 0 ].alive = 1;
   currentNumProcesses++;
 
-  /* Once the PCBs are initialised, we arbitrarily select the one in the 0-th 
-   * PCB to be executed: there is no need to preserve the execution context, 
+  /* Once the PCBs are initialised, we arbitrarily select the one in the 0-th
+   * PCB to be executed: there is no need to preserve the execution context,
    * since it is is invalid on reset (i.e., no process will previously have
    * been executing).
    */
@@ -193,9 +193,9 @@ void hilevel_handler_rst( ctx_t* ctx              ) {
   return;
 }
 
-void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) { 
+void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
   /* Based on the identifier (i.e., the immediate operand) extracted from the
-   * svc instruction, 
+   * svc instruction,
    *
    * - read  the arguments from preserved usr mode registers,
    * - perform whatever is appropriate for this system call, then
@@ -210,14 +210,14 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
     }
 
     case 0x01 : { // 0x01 => write( fd, x, n )
-      int   fd = ( int   )( ctx->gpr[ 0 ] );  
-      char*  x = ( char* )( ctx->gpr[ 1 ] );  
-      int    n = ( int   )( ctx->gpr[ 2 ] ); 
+      int   fd = ( int   )( ctx->gpr[ 0 ] );
+      char*  x = ( char* )( ctx->gpr[ 1 ] );
+      int    n = ( int   )( ctx->gpr[ 2 ] );
 
       for( int i = 0; i < n; i++ ) {
         PL011_putc( UART0, *x++, true );
       }
-      
+
       ctx->gpr[ 0 ] = n;
 
       break;
@@ -238,16 +238,16 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       pcb[ newId ].tos = (uint32_t)( &tos_P - 0x00001000*newId);
       pcb[ newId ].alive = 1;
       //pcb[ newId ].ctx.pc = ctx->pc;
-      
+
       uint32_t offset = pcb[newId-1].tos-ctx->sp;
 
       pcb[ newId ].ctx.sp = (uint32_t) pcb[ newId ].tos-offset;
 
       // memcpy((void *) &pcb[ newId ].tos-offset, (const void *) &pcb[ newId-1 ].tos-offset, offset);
-      
+
       pcb[ newId ].ctx.gpr[0] = 0;
       ctx->gpr[0] = newId;
-      
+
       break;
     }
 
@@ -258,7 +258,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       current->init_prty = 0;
       current->curr_prty = 0;
       // pcb[ current_index ].status = STATUS_TERMINATED;
-      // pcb[ current_index ].alive = 0; 
+      // pcb[ current_index ].alive = 0;
       // pcb[ current_index ].init_prty = 0;
       // pcb[ current_index ].curr_prty = 0;
       currentNumProcesses--;
@@ -284,7 +284,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
         currentNumProcesses--;
       }
       pcb[ pid ].ctx.gpr[ 0 ] = x;
-      
+
       schedule( ctx );
       break;
     }
