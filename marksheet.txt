@@ -71,6 +71,6 @@ Any other documentation, notes or comments that you think are important or
 might be easy to overlook (e.g., a subtle issue or technique in associated
 source code) should go here:
 
-[...]
+[execute cannot be called multiple times before console process has been returned to (causes deadlock).]
 
 -------------------------------------------------------------------------------
